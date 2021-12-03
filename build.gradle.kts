@@ -14,7 +14,6 @@ repositories {
 }
 
 dependencies {
-    implementation("dev.kord:kord-core:+")
     implementation("com.kotlindiscord.kord.extensions:kord-extensions:+")
     testImplementation(kotlin("test"))
 }
