@@ -7,10 +7,12 @@ import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.chatCommand
 import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
+import com.kotlindiscord.kord.extensions.utils.dm
 import com.kotlindiscord.kord.extensions.utils.env
-import com.kotlindiscord.kord.extensions.utils.respond
+import dev.kord.common.annotation.KordExperimental
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.entity.Message
+import kotlinx.coroutines.flow.first
 import java.lang.RuntimeException
 import java.net.URL
 
@@ -29,6 +31,7 @@ suspend fun main(args: Array<String>) {
 class SantaExtension : Extension() {
     override val name: String = "santa"
 
+    @OptIn(KordExperimental::class)
     override suspend fun setup() {
         publicSlashCommand {
             name = "bingbong"
@@ -72,9 +75,23 @@ class SantaExtension : Extension() {
         chatCommand {
             name = "santa"
             action {
+                val kord = this@SantaExtension.kord
+
                 val csvUrl = message.attachments.first().data.url.let { URL(it) }
-                val responses = csvUrl.readText().doSomeBullshit().drop(1).filterNot { it.isBlank() }.map(::parseResponseRegex)
-                responses.forEach { message.respond { content = it.toString() } }
+                val santies =
+                    csvUrl.readText()
+                        .doSomeBullshit()
+                        .drop(1)
+                        .filterNot { it.isBlank() }
+                        .map(::parseResponseRegex)
+                        .shuffled()
+                        .let {
+                            if (it.size % 2 == 0) it else it + it.first()
+                        }
+                santies.forEach { println(it.toString()) }
+                santies.windowed(2).map { (first, second) ->
+                    guild?.getMembers(first.name)?.first()?.dm("sup ${first.name} you got ${second.name}\naddress:\n${second.address}\nstuff:\n${second.wants}")
+                }
             }
         }
     }
@@ -85,19 +102,22 @@ class SantaExtension : Extension() {
 }
 
 fun String.doSomeBullshit(): List<String> {
+    // try ^"\n^"
     return replace("\n", "\\n")
         .replace(""" "\n" """.trim(), "\"\n\"")
         .split("\n")
 }
 
 
-fun parseResponseRegex(csv: String): List<String> {
-//    val regex = """"\d+","([a-zA-z]+)#(\d+)","([a-zA-Z0-9., ]+)".*""".toRegex()
+fun parseResponseRegex(csv: String): Santy {
     val regex = """"\d+","(.+?)#(\d+)","(.+?)","(.+?)".*""".toRegex()
-    return regex.matchEntire(csv)?.groupValues?.subList(1, 5)?.map { it.replace("\\n", "\n") }
+    return regex.matchEntire(csv)?.groupValues?.subList(1, 5)?.map { it.replace("\\n", "\n") }?.let { Santy(it) }
         ?: throw RuntimeException()
 }
 
+data class Santy(val name: String, val id: Int, val address: String, val wants: String) {
+    constructor(list: List<String>) : this(list[0], list[1].toInt(), list[2], list[3])
+}
 
 class SlapSlashArgs : Arguments() {
     val target by user("target", description = "Person you want to slap")
