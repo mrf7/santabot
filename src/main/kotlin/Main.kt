@@ -9,10 +9,13 @@ import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.dm
 import com.kotlindiscord.kord.extensions.utils.env
+import com.kotlindiscord.kord.extensions.utils.respond
 import dev.kord.common.annotation.KordExperimental
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.entity.Message
+import io.ktor.utils.io.*
 import kotlinx.coroutines.flow.first
+import java.io.File
 import java.lang.RuntimeException
 import java.net.URL
 
@@ -76,21 +79,28 @@ class SantaExtension : Extension() {
             name = "santa"
             action {
                 val kord = this@SantaExtension.kord
-
                 val csvUrl = message.attachments.first().data.url.let { URL(it) }
                 val santies =
                     csvUrl.readText()
-                        .doSomeBullshit()
+                        .lines()
                         .drop(1)
                         .filterNot { it.isBlank() }
                         .map(::parseResponseRegex)
                         .shuffled()
                         .let {
-                            if (it.size % 2 == 0) it else it + it.first()
+                            it + it.first()
                         }
-                santies.forEach { println(it.toString()) }
+                val out = File("SECRET.txt").also { it.writeText("Santas\n") }
                 santies.windowed(2).map { (first, second) ->
-                    guild?.getMembers(first.name)?.first()?.dm("sup ${first.name} you got ${second.name}\naddress:\n${second.address}\nstuff:\n${second.wants}")
+                    val member = guild?.getMembers(first.name)?.first()
+                    if (member == null) {
+                        message.respond("couldnt find ${first.name}")
+                        throw RuntimeException()
+                    }
+                    member to second
+                }.map { (santa, receiver) ->
+                    out.appendText("${receiver.name}'s gift was bought by ${santa.nickname ?: santa.username}\n")
+                    santa.dm("sup ${santa.username} you got ${receiver.name}\naddress:\n${receiver.address}\nstuff:\n${receiver.wants}")
                 }
             }
         }
